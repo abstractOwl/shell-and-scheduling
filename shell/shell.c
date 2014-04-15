@@ -17,8 +17,6 @@ void run()
     } else {
       printf("You entered: %s", line);
     }
-
-    printf("\n");
   }
 }
 
