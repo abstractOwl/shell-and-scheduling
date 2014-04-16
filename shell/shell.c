@@ -17,7 +17,7 @@
 #endif
 
 // Define constants
-#define LINE_MAX 1024
+#define IN_MAX 1024
 #define PROMPT   "sish:> "
 
 
@@ -142,7 +142,7 @@ void token_split(const char line[], const char delim[], char **tokens)
 void run(void)
 {
   while (1) {
-    char line[LINE_MAX + 1]; // Account for 150 characters + null-terminator
+    char line[IN_MAX + 1]; // Account for 150 characters + null-terminator
     if (isatty(fileno(stdin))) {
       printf("%s", PROMPT);
     }
