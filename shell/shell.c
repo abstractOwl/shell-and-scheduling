@@ -4,6 +4,7 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -65,6 +66,44 @@ void chomp(const char line[])
   }
 }
 
+// ----------------------------------------------------------------------------
+// token_count & token_split
+//
+// As a lazy way to avoid realloc messiness, we first use token_count to count
+// the number of tokens in the string. We use this number to create a char[][]
+// array big enough to hold all the tokens.
+//
+// ----------------------------------------------------------------------------
+
+int token_count(const char line[])
+{
+  // Create copy of line
+  int token_count = 0;
+  char *line_copy = strdup(line);
+  char *token;
+ 
+  while ((token = strsep(&line_copy, " ")) != NULL) {
+    ++token_count;
+  }
+  free(line_copy);
+  return token_count + 1; // Add extra space for NULL terminator
+}
+
+// Pass in char[][] array so it doesn't get scoped out
+void token_split(const char line[], char **tokens)
+{
+  // Create copy of line
+  int index = 0;
+  char *line_copy = strdup(line);
+  char *token;
+ 
+  while ((token = strsep(&line_copy, " ")) != NULL) {
+    tokens[index++] = token;
+  }
+  tokens[index++] = NULL;
+  free(line_copy);
+}
+
 // Returns the exit status, e.g. 0 on normal exit
 void run(void)
 {
@@ -78,7 +117,10 @@ void run(void)
     } else {
       chomp(line);
       printf("You entered: %s\n", line);
-      execute_ls();
+
+      char *args[token_count(line)];
+      token_split(line, args);
+      execute(args[0], args, STDIN_FILENO, STDOUT_FILENO);
     }
   }
 }
