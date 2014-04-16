@@ -8,6 +8,15 @@
 #include <string.h>
 #include <unistd.h>
 
+// Print debug messages if DEBUG = 1
+#define DEBUG 0
+#if DEBUG == 1
+#define LOG(...) fprintf(stdout, __VA_ARGS__)
+#else
+#define LOG(...)
+#endif
+
+// Define constants
 #define LINE_MAX 1024
 #define PROMPT   "sish:> "
 
@@ -16,14 +25,27 @@
 // TODO: You don't actually need `file`, it should be args[0] anyways
 void execute(const char *file, char **args, int in_stream, int out_stream)
 {
+#if DEBUG == 1
+  LOG("execute - Running '%s' with params: [ ", args[0]);
+  {
+    int i;
+    for (i = 1; i < sizeof(args); i++) {
+      if (args[i] == NULL) break;
+      LOG("'%s' ", args[i]);
+    }
+  }
+  LOG("]\n");
+#endif
+
   pid_t pid = fork();
 
   if (pid == 0) {
     // If child, execute process
+
+    // Set IO redirections
     if (in_stream != STDIN_FILENO) {
       dup2(in_stream, STDIN_FILENO);
     }
-
     if (out_stream != STDOUT_FILENO) {
       dup2(out_stream, STDOUT_FILENO);
     }
@@ -42,20 +64,20 @@ void execute(const char *file, char **args, int in_stream, int out_stream)
 }
 
 // Example code for how to use execvp
-void execute_ls(void)
-{
-  char *args[2];
-  args[0] = "ls";
-  args[1] = NULL; // args array *MUST* be terminated by a NULL ptr
-
-  int out_stream = open(
-      "test.txt",
-      O_CREAT | O_TRUNC | O_WRONLY,
-      S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
-    );
-
-  execute(args[0], args, STDIN_FILENO, out_stream);
-}
+// void execute_ls(void)
+// {
+//   char *args[2];
+//   args[0] = "ls";
+//   args[1] = NULL; // args array *MUST* be terminated by a NULL ptr
+// 
+//   int out_stream = open(
+//       "test.txt",
+//       O_CREAT | O_TRUNC | O_WRONLY,
+//       S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
+//     );
+// 
+//   execute(args[0], args, STDIN_FILENO, out_stream);
+// }
 
 // Remove trailing newline, if any
 void chomp(const char line[])
@@ -70,7 +92,7 @@ void chomp(const char line[])
 // token_count & token_split
 //
 // As a lazy way to avoid realloc messiness, we first use token_count to count
-// the number of tokens in the string. We use this number to create a char[][]
+// the number of tokens in the string. We use this integer to create a char[][]
 // array big enough to hold all the tokens.
 //
 // ----------------------------------------------------------------------------
@@ -116,7 +138,7 @@ void run(void)
       return;
     } else {
       chomp(line);
-      printf("You entered: %s\n", line);
+      LOG("You entered: '%s'\n", line);
 
       char *args[token_count(line)];
       token_split(line, args);
