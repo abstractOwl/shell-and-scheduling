@@ -3,3 +3,6 @@ all: shell.c
 
 clean:
 	rm shell
+
+test: all
+	./shell < shell-input
