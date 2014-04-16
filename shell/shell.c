@@ -125,13 +125,14 @@ void token_split(const char line[], const char delim[], char **tokens)
     if (*token == ' ') {
       token++; // Skip leading whitespace
     }
+    chomp(token, ' ');
     tokens[index++] = token;
   }
   tokens[index++] = NULL;
   free(line_copy);
 }
 
-// Returns the exit status, e.g. 0 on normal exit
+// REPL -- Read-Eval-Print-Loop
 void run(void)
 {
   while (1) {
@@ -158,10 +159,47 @@ void run(void)
       char *commands[num_pipes];
       token_split(line, "|", commands);
 
+      LOG("Found %d pipes\n", num_pipes - 1);
+
       int i;
-      for (i = 0; i < num_pipes; i++) {
+      int pipefd[2];  // Passed from previous
+      int pipefd2[2]; // Passed to next
+      for (i = 0; i < num_pipes - 1; i++) {
+        // All commands excluding the first and last *WILL* have 2 pipes,
+        // an input from the last command and an output for the next command.
+        // We only need to construct one pipe per command, since the other
+        // will come from the previous command.
         int in_stream  = STDIN_FILENO;
         int out_stream = STDOUT_FILENO;
+
+        // > is on the outside, should be split off first
+        if (i == num_pipes - 2) {
+          // Last element may have output redirection
+          int num_token = token_count(commands[num_pipes - 2], ">");
+          if (num_token - 1 == 2) {
+            char *parts[num_token];
+            token_split(commands[num_pipes - 2], ">", parts);
+
+            // Open descriptor for this file
+            out_stream = open(
+               parts[1],
+               O_CREAT | O_TRUNC | O_WRONLY,
+               S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
+             );
+
+            // Remove redirection part from original string
+            char *pos = strstr(commands[num_pipes - 2], ">");
+            *pos = '\0';
+            chomp(commands[num_pipes - 2], ' ');
+          } else if (num_token - 1 > 2) {
+            fprintf(stderr, "ERROR: Multiple output redirections are not allowed.");
+          }
+        } else {
+          if (pipe(pipefd2) == -1) {
+            perror("ERROR");
+          }
+          out_stream = pipefd2[1];
+        }
 
         if (i == 0) {
           // First element may have input redirection
@@ -172,48 +210,34 @@ void run(void)
 
             in_stream = open(
                parts[1],
-               O_CREAT | O_TRUNC | O_WRONLY,
-               S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
+               O_RDONLY
              );
+
+            // Remove redirection part from original string
+            char *pos = strstr(commands[num_pipes - 2], "<");
+            *pos = '\0';
+            chomp(commands[num_pipes - 2], ' ');
           } else if (num_token - 1 > 2) {
             fprintf(stderr, "ERROR: Multiple input redirections are not allowed.");
           }
-        } else if (i == num_pipes - 1) {
-          // Last element may have output redirection
-          int num_token = token_count(commands[num_pipes - 1], ">");
-          if (num_token - 1 == 2) {
-            char *parts[num_token];
-            token_split(commands[num_pipes - 1], ">", parts);
-
-            out_stream = open(
-               parts[1],
-               O_CREAT | O_TRUNC | O_WRONLY,
-               S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
-             );
-          } else if (num_token - 1 > 2) {
-            fprintf(stderr, "ERROR: Multiple output redirections are not allowed.");
-          }
+        } else {
+          in_stream = pipefd[0];
         }
 
         // Run command
-        printf("%s, %d, %d\n", commands[i], in_stream, out_stream);
+        char *args[token_count(commands[i], " ")];
+        token_split(commands[i], " ", args);
+        execute(args[0], args, in_stream, out_stream, is_bg);
 
         if (in_stream != STDIN_FILENO) {
           close(in_stream);
         } else if (out_stream != STDOUT_FILENO) {
           close(out_stream);
         }
+
+        pipefd[0] = pipefd2[0];
+        pipefd[1] = pipefd2[1];
       }
-
-      //int pipefd[2];
-      //if (pipe(pipefd) == -1) {
-      //  perror("ERROR");
-      //}
-
-      // code for single command
-      char *args[token_count(line, " ")];
-      token_split(line, " ", args);
-      execute(args[0], args, STDIN_FILENO, STDOUT_FILENO, is_bg);
     }
   }
 }
