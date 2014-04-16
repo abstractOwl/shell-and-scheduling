@@ -4,10 +4,10 @@ Project page: http://www.cs.ucsb.edu/~ravenben/classes/170/html/hw1.html
 
 ## Progress:
 
-- [ ] SiSH -- Simple SHell
+- [x] SiSH -- Simple SHell
    - [x] Implement basic shell functionality
-   - [ ] Implement IO Redirection (`<` and `>`)
-   - [ ] Implement Piping
+   - [x] Implement IO Redirection (`<` and `>`)
+   - [x] Implement Piping
 - [ ] Scheduler
 
 
