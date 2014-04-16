@@ -82,7 +82,7 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
 //   execvp(args[0], args);
 // }
 
-// Remove trailing newline, if any
+// Remove character from end of line, if exists
 void chomp(char *line, const char junk)
 {
   if (line[strlen(line) - 1] == junk) {
@@ -122,6 +122,9 @@ void token_split(const char line[], const char delim[], char **tokens)
   char *token;
  
   while ((token = strsep(&line_copy, delim)) != NULL) {
+    if (*token == ' ') {
+      token++; // Skip leading whitespace
+    }
     tokens[index++] = token;
   }
   tokens[index++] = NULL;
@@ -154,6 +157,53 @@ void run(void)
       int  num_pipes = token_count(line, "|");
       char *commands[num_pipes];
       token_split(line, "|", commands);
+
+      int i;
+      for (i = 0; i < num_pipes; i++) {
+        int in_stream  = STDIN_FILENO;
+        int out_stream = STDOUT_FILENO;
+
+        if (i == 0) {
+          // First element may have input redirection
+          int num_token = token_count(commands[0], "<");
+          if (num_token - 1 == 2) {
+            char *parts[num_token];
+            token_split(commands[0], "<", parts);
+
+            in_stream = open(
+               parts[1],
+               O_CREAT | O_TRUNC | O_WRONLY,
+               S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
+             );
+          } else if (num_token - 1 > 2) {
+            fprintf(stderr, "ERROR: Multiple input redirections are not allowed.");
+          }
+        } else if (i == num_pipes - 1) {
+          // Last element may have output redirection
+          int num_token = token_count(commands[num_pipes - 1], ">");
+          if (num_token - 1 == 2) {
+            char *parts[num_token];
+            token_split(commands[num_pipes - 1], ">", parts);
+
+            out_stream = open(
+               parts[1],
+               O_CREAT | O_TRUNC | O_WRONLY,
+               S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
+             );
+          } else if (num_token - 1 > 2) {
+            fprintf(stderr, "ERROR: Multiple output redirections are not allowed.");
+          }
+        }
+
+        // Run command
+        printf("%s, %d, %d\n", commands[i], in_stream, out_stream);
+
+        if (in_stream != STDIN_FILENO) {
+          close(in_stream);
+        } else if (out_stream != STDOUT_FILENO) {
+          close(out_stream);
+        }
+      }
 
       //int pipefd[2];
       //if (pipe(pipefd) == -1) {
