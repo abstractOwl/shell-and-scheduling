@@ -79,7 +79,7 @@ void execute(const char *file, char **args, int in_stream, int out_stream)
 //       S_IRUSR | S_IRGRP | S_IWGRP | S_IWUSR
 //     );
 // 
-//   execute(args[0], args, STDIN_FILENO, out_stream);
+//   execvp(args[0], args);
 // }
 
 // Remove trailing newline, if any
