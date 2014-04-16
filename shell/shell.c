@@ -41,6 +41,7 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
 
   if (pid == -1) {
     // Fork error
+    LOG("Fork error");
     perror("ERROR");
   } else if (pid == 0) {
     // If child, execute process
@@ -57,12 +58,17 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
     execvp(file, args);
     perror("ERROR");
 
-    close(in_stream);
-    close(out_stream);
   } else if (bg == 0) {
     // Wait for child to finish executing if not bg task
     int status;
     waitpid(pid, &status, 0);
+
+    if (in_stream != STDIN_FILENO) {
+      close(in_stream);
+    }
+    if (out_stream != STDOUT_FILENO) {
+      close(out_stream);
+    }
   }
 }
 
@@ -137,7 +143,9 @@ void run(void)
 {
   while (1) {
     char line[LINE_MAX + 1]; // Account for 150 characters + null-terminator
-    printf("%s", PROMPT);
+    if (isatty(fileno(stdin))) {
+      printf("%s", PROMPT);
+    }
 
     if (fgets(line, sizeof(line), stdin) == NULL
         || strcmp(line, "exit\n") == 0) {
@@ -214,9 +222,9 @@ void run(void)
              );
 
             // Remove redirection part from original string
-            char *pos = strstr(commands[num_pipes - 2], "<");
+            char *pos = strstr(commands[0], "<");
             *pos = '\0';
-            chomp(commands[num_pipes - 2], ' ');
+            chomp(commands[0], ' ');
           } else if (num_token - 1 > 2) {
             fprintf(stderr, "ERROR: Multiple input redirections are not allowed.");
           }
@@ -224,19 +232,17 @@ void run(void)
           in_stream = pipefd[0];
         }
 
+        // Don't wait for piped jobs to finish
+        if (i != 0 && i != num_pipes - 2) {
+          is_bg = 1;
+        }
+
         // Run command
         char *args[token_count(commands[i], " ")];
         token_split(commands[i], " ", args);
         execute(args[0], args, in_stream, out_stream, is_bg);
 
-        if (in_stream != STDIN_FILENO) {
-          close(in_stream);
-        } else if (out_stream != STDOUT_FILENO) {
-          close(out_stream);
-        }
-
         pipefd[0] = pipefd2[0];
-        pipefd[1] = pipefd2[1];
       }
     }
   }
