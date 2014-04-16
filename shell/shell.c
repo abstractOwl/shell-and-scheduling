@@ -39,7 +39,10 @@ void execute(const char *file, char **args, int in_stream, int out_stream)
 
   pid_t pid = fork();
 
-  if (pid == 0) {
+  if (pid == -1) {
+    // Fork error
+    perror("ERROR");
+  } else if (pid == 0) {
     // If child, execute process
 
     // Set IO redirections
