@@ -23,10 +23,10 @@
 
 // Execute a file
 // TODO: You don't actually need `file`, it should be args[0] anyways
-void execute(const char *file, char **args, int in_stream, int out_stream)
+void execute(const char *file, char **args, int in_stream, int out_stream, int bg)
 {
 #if DEBUG == 1
-  LOG("execute - Running '%s' with params: [ ", args[0]);
+  LOG("execute - Running `%s`%s with params: [ ", args[0], bg ? "[BG]" : "");
   {
     int i;
     for (i = 1; i < sizeof(args); i++) {
@@ -59,8 +59,8 @@ void execute(const char *file, char **args, int in_stream, int out_stream)
 
     close(in_stream);
     close(out_stream);
-  } else {
-    // Wait for child to finish executing
+  } else if (bg == 0) {
+    // Wait for child to finish executing if not bg task
     int status;
     waitpid(pid, &status, 0);
   }
@@ -83,11 +83,10 @@ void execute(const char *file, char **args, int in_stream, int out_stream)
 // }
 
 // Remove trailing newline, if any
-void chomp(const char line[])
+void chomp(char *line, const char junk)
 {
-  char *nl_index = strchr(line, '\n');
-  if (nl_index != NULL) {
-    *nl_index = '\0';
+  if (line[strlen(line) - 1] == junk) {
+    line[strlen(line) - 1] = '\0';
   }
 }
 
@@ -100,14 +99,14 @@ void chomp(const char line[])
 //
 // ----------------------------------------------------------------------------
 
-int token_count(const char line[])
+int token_count(const char line[], const char delim[])
 {
   // Create copy of line
   int token_count = 0;
   char *line_copy = strdup(line);
   char *token;
  
-  while ((token = strsep(&line_copy, " ")) != NULL) {
+  while ((token = strsep(&line_copy, delim)) != NULL) {
     ++token_count;
   }
   free(line_copy);
@@ -115,14 +114,14 @@ int token_count(const char line[])
 }
 
 // Pass in char[][] array so it doesn't get scoped out
-void token_split(const char line[], char **tokens)
+void token_split(const char line[], const char delim[], char **tokens)
 {
   // Create copy of line
   int index = 0;
   char *line_copy = strdup(line);
   char *token;
  
-  while ((token = strsep(&line_copy, " ")) != NULL) {
+  while ((token = strsep(&line_copy, delim)) != NULL) {
     tokens[index++] = token;
   }
   tokens[index++] = NULL;
@@ -140,12 +139,31 @@ void run(void)
         || strcmp(line, "exit\n") == 0) {
       return;
     } else {
-      chomp(line);
+      chomp(line, '\n');
       LOG("You entered: '%s'\n", line);
 
-      char *args[token_count(line)];
-      token_split(line, args);
-      execute(args[0], args, STDIN_FILENO, STDOUT_FILENO);
+      // Check for trailing '&' (backgrounding)
+      int is_bg = 0;
+      if (line[strlen(line) - 1] == '&') {
+        chomp(line, '&');
+        chomp(line, ' '); // chomp in case of space before '&'
+        is_bg = 1;
+      }
+
+      // Split line based on pipes
+      int  num_pipes = token_count(line, "|");
+      char *commands[num_pipes];
+      token_split(line, "|", commands);
+
+      //int pipefd[2];
+      //if (pipe(pipefd) == -1) {
+      //  perror("ERROR");
+      //}
+
+      // code for single command
+      char *args[token_count(line, " ")];
+      token_split(line, " ", args);
+      execute(args[0], args, STDIN_FILENO, STDOUT_FILENO, is_bg);
     }
   }
 }
