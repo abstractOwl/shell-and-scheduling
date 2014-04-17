@@ -1,3 +1,12 @@
+/**
+ * Simple SHell
+ * for UCSB CS170
+ *
+ * Group:
+ * - Andrew Lo
+ * - Jon Adler
+ */
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -18,11 +27,19 @@
 
 // Define constants
 #define IN_MAX 1024
-#define PROMPT   "sish:> "
+#define PROMPT "sish:> "
 
 
-// Execute a file
-// TODO: You don't actually need `file`, it should be args[0] anyways
+/**
+ * Executes a program given arguments and IO params.
+ *
+ * @param file       Program to run
+ * @param args       Argument array, which ends with NULL 0
+ * @param in_stream  File descriptor of file to read from
+ * @param out_stream File descriptor of file to write to
+ * @param bg         Boolean value describing whether to wait for this program
+ *                   to finish before continuing
+ */
 void execute(const char *file, char **args, int in_stream, int out_stream, int bg)
 {
 #if DEBUG == 1
@@ -39,10 +56,12 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
 
   pid_t pid = fork();
 
+  // Child must exit
   if (pid == -1) {
     // Fork error
     perror("ERROR");
     exit(EXIT_FAILURE);
+
   } else if (pid == 0) {
     // If child, execute process
 
@@ -66,6 +85,7 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
     if (out_stream != STDOUT_FILENO) {
       close(out_stream);
     }
+
   }
 }
 
@@ -85,7 +105,13 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
 //   execvp(args[0], args);
 // }
 
-// Remove character from end of line, if exists
+/**
+ * Removes a character from the end of a line, if it exists. This works by
+ * replacing the offending character with a null-terminator '\0'.
+ *
+ * @param line Pointer to the beginning of the line to operate upon
+ * @param junk Character to check for/remove
+ */
 void chomp(char *line, const char junk)
 {
   if (line[strlen(line) - 1] == junk) {
@@ -102,6 +128,13 @@ void chomp(char *line, const char junk)
 //
 // ----------------------------------------------------------------------------
 
+/**
+ * Returns the number of tokens in a string that are separated by a specified
+ * delimiter.
+ *
+ * @param line  String to check
+ * @param delim Delimiter string
+ */
 int token_count(const char line[], const char delim[])
 {
   // Create copy of line
@@ -116,7 +149,14 @@ int token_count(const char line[], const char delim[])
   return token_count + 1; // Add extra space for NULL terminator
 }
 
-// Pass in char[][] array so it doesn't get scoped out
+/**
+ * Splits a string around a specified delimiter. Note that the `tokens`
+ * array should be a char* array of length calculated by `token_count`.
+ *
+ * @param line   Line to operate upon
+ * @param delim  Delimiter string
+ * @param tokens (char*) array to store the tokens in
+ */
 void token_split(const char line[], const char delim[], char **tokens)
 {
   // Create copy of line
@@ -135,7 +175,9 @@ void token_split(const char line[], const char delim[], char **tokens)
   free(line_copy);
 }
 
-// REPL -- Read-Eval-Print-Loop
+/**
+ * Run loop of this shell.
+ */
 void run(void)
 {
   while (1) {
@@ -161,6 +203,8 @@ void run(void)
       }
 
       // Split line based on pipes
+      // num_pipes accounts for the extra NULL pointer which is not used for
+      // pipes array, therefore subtract 2
       int  num_pipes = token_count(line, "|");
       char *commands[num_pipes];
       token_split(line, "|", commands);
