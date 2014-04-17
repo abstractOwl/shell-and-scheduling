@@ -41,8 +41,8 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
 
   if (pid == -1) {
     // Fork error
-    LOG("Fork error");
     perror("ERROR");
+    exit(EXIT_FAILURE);
   } else if (pid == 0) {
     // If child, execute process
 
@@ -53,6 +53,7 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
     // Execute file
     execvp(file, args);
     perror("ERROR");
+    _exit(EXIT_SUCCESS);
 
   } else if (bg == 0) {
     // Wait for child to finish executing if not bg task
@@ -143,11 +144,13 @@ void run(void)
       printf("%s", PROMPT);
     }
 
-    if (!fgets(line, sizeof(line), stdin) || strcmp(line, "exit\n") == 0) {
-      break;
+    char *result = fgets(line, sizeof(line), stdin);
+    LOG("You entered: '%s'\n", line);
+    if (result == NULL || strcmp(line, "exit\n") == 0) {
+      LOG("Exiting...\n");
+      return;
     } else {
       chomp(line, '\n');
-      LOG("You entered: '%s'\n", line);
 
       // Check for trailing '&' (backgrounding)
       int is_bg = 0;
