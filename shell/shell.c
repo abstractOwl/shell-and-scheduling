@@ -47,12 +47,8 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
     // If child, execute process
 
     // Set IO redirections
-    if (in_stream != STDIN_FILENO) {
-      dup2(in_stream, STDIN_FILENO);
-    }
-    if (out_stream != STDOUT_FILENO) {
-      dup2(out_stream, STDOUT_FILENO);
-    }
+    dup2(in_stream, STDIN_FILENO);
+    dup2(out_stream, STDOUT_FILENO);
 
     // Execute file
     execvp(file, args);
@@ -147,9 +143,8 @@ void run(void)
       printf("%s", PROMPT);
     }
 
-    if (fgets(line, sizeof(line), stdin) == NULL
-        || strcmp(line, "exit\n") == 0) {
-      return;
+    if (!fgets(line, sizeof(line), stdin) || strcmp(line, "exit\n") == 0) {
+      break;
     } else {
       chomp(line, '\n');
       LOG("You entered: '%s'\n", line);
@@ -185,7 +180,7 @@ void run(void)
           // Last element may have output redirection
           int num_token = token_count(commands[num_pipes - 2], ">");
           if (num_token - 1 == 2) {
-            char *parts[num_token];
+            char *parts[2];
             token_split(commands[num_pipes - 2], ">", parts);
 
             // Open descriptor for this file
@@ -213,7 +208,7 @@ void run(void)
           // First element may have input redirection
           int num_token = token_count(commands[0], "<");
           if (num_token - 1 == 2) {
-            char *parts[num_token];
+            char *parts[2];
             token_split(commands[0], "<", parts);
 
             in_stream = open(
