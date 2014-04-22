@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +66,10 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
   } else if (pid == 0) {
     // If child, execute process
 
+    // Enable interruption signals
+    signal(SIGTERM, SIG_DFL);
+    signal(SIGINT,  SIG_DFL);
+
     // Set IO redirections
     dup2(in_stream, STDIN_FILENO);
     dup2(out_stream, STDOUT_FILENO);
@@ -85,7 +90,6 @@ void execute(const char *file, char **args, int in_stream, int out_stream, int b
     if (out_stream != STDOUT_FILENO) {
       close(out_stream);
     }
-
   }
 }
 
@@ -180,6 +184,10 @@ void token_split(const char line[], const char delim[], char **tokens)
  */
 void run(void)
 {
+  // Disable SIG_INIT, SIG_TERM
+  signal(SIGTERM, SIG_IGN);
+  signal(SIGINT,  SIG_IGN);
+
   while (1) {
     char line[IN_MAX + 1]; // Account for 150 characters + null-terminator
     if (isatty(fileno(stdin))) {
