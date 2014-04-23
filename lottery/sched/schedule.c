@@ -48,6 +48,7 @@ static void balance_queues(struct timer *tp);
 
 /* processes created by RS are sysytem processes */
 #define is_system_proc(p)	((p)->parent == RS_PROC_NR)
+#define IN_USER_Q(q) (q >= MAX_USER_Q && q <= MIN_USER_Q)
 
 static unsigned cpu_proc[CONFIG_MAX_CPUS];
 
@@ -99,7 +100,7 @@ void do_lottery(void)
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         winner -= rmp->tickets;
 
-        if (winner <= 0 && !is_system_proc(rmp)) {
+        if (winner <= 0 && IN_USER_Q(rmp->priority)) {
             // Found winner
             if (rmp->priority > MAX_PRIORITY_Q) {
                 rmp->priority -= 1; /* increase priority */
@@ -207,6 +208,13 @@ int do_start_scheduling(message *m_ptr)
 		return EINVAL;
 	}
 
+    if (IN_USER_Q(rmp->priority)) {
+        rmp->max_priority = MAX_USER_Q;
+        rmp->priority     = USER_Q;
+        rmp->tickets    = DEFAULT_TICKETS;
+        total_tickets  += rmp->tickets;
+    }
+
 	/* Inherit current priority and time slice from parent. Since there
 	 * is currently only one scheduler scheduling the whole system, this
 	 * value is local and we assert that the parent endpoint is valid */
@@ -215,8 +223,6 @@ int do_start_scheduling(message *m_ptr)
 		   process scheduled, and the parent of itself. */
 		rmp->priority   = USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
-        rmp->tickets    = DEFAULT_TICKETS;
-        total_tickets  += rmp->tickets;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -297,32 +303,51 @@ int do_start_scheduling(message *m_ptr)
  *===========================================================================*/
 int do_nice(message *m_ptr)
 {
-	struct schedproc *rmp;
-	int rv;
-	int proc_nr_n;
-	unsigned tickets;
+    struct schedproc *rmp;
+    int rv;
+    int proc_nr_n;
+    unsigned new_q, old_q, old_max_q;
 
-	/* check who can send you requests */
-	if (!accept_message(m_ptr))
-		return EPERM;
+    /* check who can send you requests */
+    if (!accept_message(m_ptr))
+        return EPERM;
 
-	if (sched_isokendpt(m_ptr->SCHEDULING_ENDPOINT, &proc_nr_n) != OK) {
-		printf("SCHED: WARNING: got an invalid endpoint in OOQ msg "
-		"%ld\n", m_ptr->SCHEDULING_ENDPOINT);
-		return EBADEPT;
-	}
+    if (sched_isokendpt(m_ptr->SCHEDULING_ENDPOINT, &proc_nr_n) != OK) {
+        printf("SCHED: WARNING: got an invalid endpoint in OOQ msg "
+        "%ld\n", m_ptr->SCHEDULING_ENDPOINT);
+        return EBADEPT;
+    }
 
-	rmp = &schedproc[proc_nr_n];
-	tickets = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
-	if (tickets < 0 || tickets > 100) {
-		return EINVAL;
-	}
 
-    total_tickets += total_tickets - rmp->tickets;
-    rmp->tickets = tickets;
+    rmp = &schedproc[proc_nr_n];
+    new_q = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
+    if (new_q >= NR_SCHED_QUEUES) {
+        return EINVAL;
+    }
 
-	return OK;
+    if (IN_USER_Q(rmp->priority)) {
+        total_tickets += total_tickets - new_q;
+        rmp->tickets = new_q;
+        return OK;
+    }
+
+    /* Store old values, in case we need to roll back the changes */
+    old_q = rmp->priority;
+    old_max_q = rmp->max_priority;
+
+    /* Update the proc entry and reschedule the process */
+    rmp->max_priority = rmp->priority = new_q;
+
+    if ((rv = schedule_process_local(rmp)) != OK) {
+        /* Something went wrong when rescheduling the process, roll
+        * back the changes to proc struct */
+        rmp->priority = old_q;
+        rmp->max_priority = old_max_q;
+    }
+
+    return rv;
 }
+
 
 /*===========================================================================*
  *				schedule_process			     *
