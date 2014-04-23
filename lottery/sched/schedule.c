@@ -318,6 +318,7 @@ int do_nice(message *m_ptr)
 		return EINVAL;
 	}
 
+    total_tickets += total_tickets - rmp->tickets;
     rmp->tickets = tickets;
 
 	return OK;
