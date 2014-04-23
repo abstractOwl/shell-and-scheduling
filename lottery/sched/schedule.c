@@ -10,12 +10,14 @@
 #include "sched.h"
 #include "schedproc.h"
 #include <assert.h>
+#include <stdlib.h>
 #include <minix/com.h>
 #include <machine/archtypes.h>
 #include "kernel/proc.h" /* for queue constants */
 
 static timer_t sched_timer;
 static unsigned balance_timeout;
+static unsigned total_tickets = 0;
 
 #define BALANCE_TIMEOUT	5 /* how often to balance queues in seconds */
 
@@ -41,6 +43,7 @@ static void balance_queues(struct timer *tp);
 
 #define cpu_is_available(c)	(cpu_proc[c] >= 0)
 
+#define DEFAULT_TICKETS 5
 #define DEFAULT_USER_TIME_SLICE 200
 
 /* processes created by RS are sysytem processes */
@@ -84,6 +87,31 @@ static void pick_cpu(struct schedproc * proc)
 }
 
 /*===========================================================================*
+ *				do_lottery				     *
+ *===========================================================================*/
+void do_lottery(void)
+{
+	struct schedproc *rmp;
+	int proc_nr;
+
+    unsigned winner = random() % total_tickets();
+
+	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+        winner -= rmp->tickets;
+
+        if (winner <= 0 && !is_system_proc(rmp)) {
+            // Found winner
+            if (rmp->priority > MAX_PRIORITY_Q) {
+                rmp->priority -= 1; /* increase priority */
+            }
+
+            schedule_process_local(rmp);
+            break;
+        }
+	}
+}
+
+/*===========================================================================*
  *				do_noquantum				     *
  *===========================================================================*/
 
@@ -101,11 +129,17 @@ int do_noquantum(message *m_ptr)
 	rmp = &schedproc[proc_nr_n];
 	if (rmp->priority < MIN_USER_Q) {
 		rmp->priority += 1; /* lower priority */
+        if (rmp->priority < MIN_USER_Q) {
+            rmp->priority += 1; /* lower priority */
+        }
 	}
 
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		return rv;
 	}
+
+    do_lottery();
+
 	return OK;
 }
 
@@ -132,6 +166,12 @@ int do_stop_scheduling(message *m_ptr)
 	cpu_proc[rmp->cpu]--;
 #endif
 	rmp->flags = 0; /*&= ~IN_USE;*/
+
+    // Remove tickets from pool
+    total_tickets -= rmp->tickets;
+
+    // Handle case where task finishes before quantum runs out
+    do_lottery();
 
 	return OK;
 }
@@ -175,6 +215,8 @@ int do_start_scheduling(message *m_ptr)
 		   process scheduled, and the parent of itself. */
 		rmp->priority   = USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
+        rmp->tickets    = DEFAULT_TICKETS;
+        total_tickets  += rmp->tickets;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -258,7 +300,7 @@ int do_nice(message *m_ptr)
 	struct schedproc *rmp;
 	int rv;
 	int proc_nr_n;
-	unsigned new_q, old_q, old_max_q;
+	unsigned tickets;
 
 	/* check who can send you requests */
 	if (!accept_message(m_ptr))
@@ -271,26 +313,14 @@ int do_nice(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
-	new_q = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
-	if (new_q >= NR_SCHED_QUEUES) {
+	tickets = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
+	if (tickets < 0 || tickets > 100) {
 		return EINVAL;
 	}
 
-	/* Store old values, in case we need to roll back the changes */
-	old_q     = rmp->priority;
-	old_max_q = rmp->max_priority;
+    rmp->tickets = tickets;
 
-	/* Update the proc entry and reschedule the process */
-	rmp->max_priority = rmp->priority = new_q;
-
-	if ((rv = schedule_process_local(rmp)) != OK) {
-		/* Something went wrong when rescheduling the process, roll
-		 * back the changes to proc struct */
-		rmp->priority     = old_q;
-		rmp->max_priority = old_max_q;
-	}
-
-	return rv;
+	return OK;
 }
 
 /*===========================================================================*
@@ -350,17 +380,17 @@ void init_scheduling(void)
  */
 static void balance_queues(struct timer *tp)
 {
-	struct schedproc *rmp;
-	int proc_nr;
+	// struct schedproc *rmp;
+	// int proc_nr;
 
-	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-		if (rmp->flags & IN_USE) {
-			if (rmp->priority > rmp->max_priority) {
-				rmp->priority -= 1; /* increase priority */
-				schedule_process_local(rmp);
-			}
-		}
-	}
+	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+	// 	if (rmp->flags & IN_USE) {
+	// 		if (rmp->priority > rmp->max_priority) {
+	// 			rmp->priority -= 1; /* increase priority */
+	// 			schedule_process_local(rmp);
+	// 		}
+	// 	}
+	// }
 
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
 }
