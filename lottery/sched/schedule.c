@@ -94,14 +94,14 @@ void do_lottery(void)
 	struct schedproc *rmp;
 	int proc_nr;
 
-    unsigned winner = random() % total_tickets();
+    unsigned winner = rand() % total_tickets;
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         winner -= rmp->tickets;
 
-        if (winner <= 0 && IN_USER_Q(rmp->priority)) {
+        if (winner <= 0 && !is_system_proc(rmp)) {
             // Found winner
-            if (rmp->priority > MAX_PRIORITY_Q) {
+            if (rmp->priority > MAX_USER_Q) {
                 rmp->priority = MAX_USER_Q; /* increase priority */
                 schedule_process_local(rmp);
             }
@@ -119,6 +119,7 @@ int do_noquantum(message *m_ptr)
 {
 	register struct schedproc *rmp;
 	int rv, proc_nr_n;
+	int proc_nr;
 
 	if (sched_isokendpt(m_ptr->m_source, &proc_nr_n) != OK) {
 		printf("SCHED: WARNING: got an invalid endpoint in OOQ msg %u.\n",
@@ -128,21 +129,23 @@ int do_noquantum(message *m_ptr)
 
 	rmp = &schedproc[proc_nr_n];
 
-	struct schedproc *rmp;
-	int proc_nr;
-
     if (rmp->priority < MIN_USER_Q) {
         rmp->priority += 1; /* lower priority */
+
+        if ((rv = schedule_process_local(rmp)) != OK) {
+            return rv;
+        }
     }
+
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (rmp->priority < MIN_USER_Q) {
+        if (!is_system_proc(rmp) && rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
-        }
-	}
 
-	if ((rv = schedule_process_local(rmp)) != OK) {
-		return rv;
+            if ((rv = schedule_process_local(rmp)) != OK) {
+                return rv;
+            }
+        }
 	}
 
     do_lottery();
@@ -396,6 +399,8 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 void init_scheduling(void)
 {
+    time_t t;
+    srand((unsigned) time(&t));
 	balance_timeout = BALANCE_TIMEOUT * sys_hz();
 	init_timer(&sched_timer);
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
