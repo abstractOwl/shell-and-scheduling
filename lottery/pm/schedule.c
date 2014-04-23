@@ -14,6 +14,8 @@
 #include <timers.h>
 #include "kernel/proc.h"
 
+#define is_system_proc(p)	((p)->mp_parent == RS_PROC_NR)
+
 /*===========================================================================*
  *				init_scheduling				     *
  *===========================================================================*/
@@ -98,7 +100,10 @@ int sched_nice(struct mproc *rmp, int nice)
 	if (rmp->mp_scheduler == KERNEL || rmp->mp_scheduler == NONE)
 		return (EINVAL);
 
-	if ((rv = nice_to_priority(nice, &maxprio)) != OK) {
+    // If system process
+    if (!is_system_proc(rmp)) {
+        maxprio = MAX_USER_Q;
+    } else if ((rv = nice_to_priority(nice, &maxprio)) != OK) {
 		return rv;
 	}
 

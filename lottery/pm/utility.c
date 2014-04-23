@@ -106,10 +106,6 @@ int nice_to_priority(int nice, unsigned* new_q)
 {
 	if (nice < PRIO_MIN || nice > PRIO_MAX) return(EINVAL);
 
-    if (IN_USER_Q(*new_q)) {
-        return (nice < 0 || nice > 100) ? EINVAL : OK;
-    }
-
 	*new_q = MAX_USER_Q + (nice-PRIO_MIN) * (MIN_USER_Q-MAX_USER_Q+1) /
 	    (PRIO_MAX-PRIO_MIN+1);
 

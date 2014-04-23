@@ -48,7 +48,6 @@ static void balance_queues(struct timer *tp);
 
 /* processes created by RS are sysytem processes */
 #define is_system_proc(p)	((p)->parent == RS_PROC_NR)
-#define IN_USER_Q(q) (q >= MAX_USER_Q && q <= MIN_USER_Q)
 
 static unsigned cpu_proc[CONFIG_MAX_CPUS];
 
@@ -103,10 +102,10 @@ void do_lottery(void)
         if (winner <= 0 && IN_USER_Q(rmp->priority)) {
             // Found winner
             if (rmp->priority > MAX_PRIORITY_Q) {
-                rmp->priority -= 1; /* increase priority */
+                rmp->priority = MAX_USER_Q; /* increase priority */
+                schedule_process_local(rmp);
             }
 
-            schedule_process_local(rmp);
             break;
         }
 	}
@@ -128,8 +127,15 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
-	if (rmp->priority < MIN_USER_Q) {
-		rmp->priority += 1; /* lower priority */
+
+	struct schedproc *rmp;
+	int proc_nr;
+
+    if (rmp->priority < MIN_USER_Q) {
+        rmp->priority += 1; /* lower priority */
+    }
+    // Decrease each process 
+	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
         }
@@ -208,11 +214,11 @@ int do_start_scheduling(message *m_ptr)
 		return EINVAL;
 	}
 
-    if (IN_USER_Q(rmp->priority)) {
+    if (!is_system_proc(rmp)) {
         rmp->max_priority = MAX_USER_Q;
         rmp->priority     = USER_Q;
-        rmp->tickets    = DEFAULT_TICKETS;
-        total_tickets  += rmp->tickets;
+        rmp->tickets      = DEFAULT_TICKETS;
+        total_tickets    += rmp->tickets;
     }
 
 	/* Inherit current priority and time slice from parent. Since there
@@ -325,9 +331,9 @@ int do_nice(message *m_ptr)
         return EINVAL;
     }
 
-    if (IN_USER_Q(rmp->priority)) {
+    if (!is_system_proc(rmp)) {
         total_tickets += total_tickets - new_q;
-        rmp->tickets = new_q;
+        rmp->tickets   = new_q;
         return OK;
     }
 
