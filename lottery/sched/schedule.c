@@ -7,10 +7,10 @@
  *   do_nice		  Request to change the nice level on a proc
  *   init_scheduling      Called from main.c to set up/prepare scheduling
  */
+#include <stdlib.h>
 #include "sched.h"
 #include "schedproc.h"
 #include <assert.h>
-#include <stdlib.h>
 #include <minix/com.h>
 #include <machine/archtypes.h>
 #include "kernel/proc.h" /* for queue constants */
@@ -94,7 +94,7 @@ void do_lottery(void)
 	struct schedproc *rmp;
 	int proc_nr;
 
-    unsigned winner = rand() % total_tickets;
+    unsigned winner = (int) random() % total_tickets;
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         winner -= rmp->tickets;
@@ -129,17 +129,9 @@ int do_noquantum(message *m_ptr)
 
 	rmp = &schedproc[proc_nr_n];
 
-    if (rmp->priority < MIN_USER_Q) {
-        rmp->priority += 1; /* lower priority */
-
-        if ((rv = schedule_process_local(rmp)) != OK) {
-            return rv;
-        }
-    }
-
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (!is_system_proc(rmp) && rmp->priority < MIN_USER_Q) {
+        if (rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
 
             if ((rv = schedule_process_local(rmp)) != OK) {
@@ -217,21 +209,16 @@ int do_start_scheduling(message *m_ptr)
 		return EINVAL;
 	}
 
-    if (!is_system_proc(rmp)) {
-        rmp->max_priority = MAX_USER_Q;
-        rmp->priority     = USER_Q;
-        rmp->tickets      = DEFAULT_TICKETS;
-        total_tickets    += rmp->tickets;
-    }
-
 	/* Inherit current priority and time slice from parent. Since there
 	 * is currently only one scheduler scheduling the whole system, this
 	 * value is local and we assert that the parent endpoint is valid */
 	if (rmp->endpoint == rmp->parent) {
 		/* We have a special case here for init, which is the first
 		   process scheduled, and the parent of itself. */
-		rmp->priority   = USER_Q;
+		rmp->priority   = MAX_USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
+        rmp->tickets    = DEFAULT_TICKETS;
+        total_tickets  += rmp->tickets;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -262,6 +249,12 @@ int do_start_scheduling(message *m_ptr)
 		if ((rv = sched_isokendpt(m_ptr->SCHEDULING_PARENT,
 				&parent_nr_n)) != OK)
 			return rv;
+
+        if (!is_system_proc(rmp)) {
+            rmp->max_priority = MAX_USER_Q;
+            rmp->tickets      = DEFAULT_TICKETS;
+            total_tickets    += rmp->tickets;
+        }
 
 		rmp->priority = schedproc[parent_nr_n].priority;
 		rmp->time_slice = schedproc[parent_nr_n].time_slice;
@@ -399,8 +392,7 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 void init_scheduling(void)
 {
-    time_t t;
-    srand((unsigned) time(&t));
+    srandom(time(NULL));
 	balance_timeout = BALANCE_TIMEOUT * sys_hz();
 	init_timer(&sched_timer);
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);

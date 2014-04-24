@@ -61,7 +61,9 @@ int sched_start_user(endpoint_t ep, struct mproc *rmp)
 	int rv;
 
 	/* convert nice to priority */
-	if ((rv = nice_to_priority(rmp->mp_nice, &maxprio)) != OK) {
+    if (!is_system_proc(rmp)) {
+        maxprio = MAX_USER_Q;
+    } else if ((rv = nice_to_priority(rmp->mp_nice, &maxprio)) != OK) {
 		return rv;
 	}
 	
