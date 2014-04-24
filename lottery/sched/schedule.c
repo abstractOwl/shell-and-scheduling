@@ -97,6 +97,8 @@ void do_lottery(void)
     unsigned winner = (int) random() % total_tickets;
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+        if (is_system_proc(rmp)) continue;
+
         winner -= rmp->tickets;
 
         if (winner <= 0 && !is_system_proc(rmp)) {
@@ -128,15 +130,21 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
+    if (is_system_proc(rmp)) {
+        if (rmp->priority < MIN_USER_Q) {
+            rmp->priority += 1; /* lower priority */
+        }
+
+        if ((rv = schedule_process_local(rmp)) != OK) {
+            return rv;
+        }
+    }
 
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
-
-            if ((rv = schedule_process_local(rmp)) != OK) {
-                return rv;
-            }
+            schedule_process_local(rmp);
         }
 	}
 
@@ -215,7 +223,7 @@ int do_start_scheduling(message *m_ptr)
 	if (rmp->endpoint == rmp->parent) {
 		/* We have a special case here for init, which is the first
 		   process scheduled, and the parent of itself. */
-		rmp->priority   = MAX_USER_Q;
+		rmp->priority   = USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
         rmp->tickets    = DEFAULT_TICKETS;
         total_tickets  += rmp->tickets;
@@ -320,7 +328,6 @@ int do_nice(message *m_ptr)
         return EBADEPT;
     }
 
-
     rmp = &schedproc[proc_nr_n];
     new_q = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
     if (new_q >= NR_SCHED_QUEUES) {
@@ -334,7 +341,7 @@ int do_nice(message *m_ptr)
     }
 
     /* Store old values, in case we need to roll back the changes */
-    old_q = rmp->priority;
+    old_q     = rmp->priority;
     old_max_q = rmp->max_priority;
 
     /* Update the proc entry and reschedule the process */
@@ -342,8 +349,8 @@ int do_nice(message *m_ptr)
 
     if ((rv = schedule_process_local(rmp)) != OK) {
         /* Something went wrong when rescheduling the process, roll
-        * back the changes to proc struct */
-        rmp->priority = old_q;
+         * back the changes to proc struct */
+        rmp->priority     = old_q;
         rmp->max_priority = old_max_q;
     }
 
@@ -409,17 +416,17 @@ void init_scheduling(void)
  */
 static void balance_queues(struct timer *tp)
 {
-	// struct schedproc *rmp;
-	// int proc_nr;
+	struct schedproc *rmp;
+	int proc_nr;
 
-	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-	// 	if (rmp->flags & IN_USE) {
-	// 		if (rmp->priority > rmp->max_priority) {
-	// 			rmp->priority -= 1; /* increase priority */
-	// 			schedule_process_local(rmp);
-	// 		}
-	// 	}
-	// }
+	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+		if (is_system_proc(rmp) && rmp->flags & IN_USE) {
+			if (rmp->priority > rmp->max_priority) {
+				rmp->priority -= 1; /* increase priority */
+				schedule_process_local(rmp);
+			}
+		}
+	}
 
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
 }

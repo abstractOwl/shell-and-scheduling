@@ -102,7 +102,6 @@ int sched_nice(struct mproc *rmp, int nice)
 	if (rmp->mp_scheduler == KERNEL || rmp->mp_scheduler == NONE)
 		return (EINVAL);
 
-    // If system process
     if (!is_system_proc(rmp)) {
         maxprio = MAX_USER_Q;
     } else if ((rv = nice_to_priority(nice, &maxprio)) != OK) {
