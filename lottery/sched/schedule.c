@@ -8,6 +8,7 @@
  *   init_scheduling      Called from main.c to set up/prepare scheduling
  */
 #include <stdlib.h>
+#include <time.h>
 #include "sched.h"
 #include "schedproc.h"
 #include <assert.h>
