@@ -98,17 +98,16 @@ void do_lottery(void)
     unsigned winner = (int) random() % total_tickets;
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (is_system_proc(rmp)) continue;
+        if (is_system_proc(rmp) || !(rmp->flags & IN_USE)) continue;
 
         winner -= rmp->tickets;
 
-        if (winner <= 0 && !is_system_proc(rmp)) {
+        if (winner <= 0) {
             // Found winner
             if (rmp->priority > MAX_USER_Q) {
                 rmp->priority = MAX_USER_Q; /* increase priority */
                 schedule_process_local(rmp);
             }
-
             break;
         }
 	}
@@ -143,7 +142,8 @@ int do_noquantum(message *m_ptr)
 
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (!is_system_proc(rmp) && rmp->priority < MIN_USER_Q) {
+        if (!is_system_proc(rmp) && rmp->flags & IN_USE
+                && rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
             schedule_process_local(rmp);
         }
@@ -231,7 +231,6 @@ int do_start_scheduling(message *m_ptr)
 		rmp->priority   = USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
         rmp->tickets    = DEFAULT_TICKETS;
-        total_tickets  += rmp->tickets;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -253,6 +252,7 @@ int do_start_scheduling(message *m_ptr)
 		 * from the parent */
 		rmp->priority   = rmp->max_priority;
 		rmp->time_slice = (unsigned) m_ptr->SCHEDULING_QUANTUM;
+        rmp->tickets    = 0;
 		break;
 		
 	case SCHEDULING_INHERIT:
@@ -266,7 +266,6 @@ int do_start_scheduling(message *m_ptr)
         if (!is_system_proc(rmp)) {
             rmp->max_priority = MAX_USER_Q;
             rmp->tickets      = DEFAULT_TICKETS;
-            total_tickets    += rmp->tickets;
         }
 
 		rmp->priority = schedproc[parent_nr_n].priority;
@@ -310,6 +309,8 @@ int do_start_scheduling(message *m_ptr)
 
 	m_ptr->SCHEDULING_SCHEDULER = SCHED_PROC_NR;
 
+    total_tickets += rmp->tickets;
+
 	return OK;
 }
 
@@ -340,7 +341,7 @@ int do_nice(message *m_ptr)
     }
 
     if (!is_system_proc(rmp)) {
-        total_tickets += total_tickets - new_q;
+        total_tickets += new_q - rmp->tickets;
         rmp->tickets   = new_q;
         return OK;
     }
