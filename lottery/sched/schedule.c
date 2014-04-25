@@ -95,7 +95,7 @@ void do_lottery(void)
 	struct schedproc *rmp;
 	int proc_nr;
 
-    unsigned winner = (int) random() % total_tickets;
+    int winner = (int) random() % total_tickets;
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (is_system_proc(rmp) || !(rmp->flags & IN_USE)) continue;
