@@ -143,13 +143,15 @@ int do_noquantum(message *m_ptr)
 
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (rmp->priority < MIN_USER_Q && !is_system_proc(rmp)) {
+        if (!is_system_proc(rmp) && rmp->priority < MIN_USER_Q) {
             rmp->priority += 1; /* lower priority */
             schedule_process_local(rmp);
         }
 	}
 
-    do_lottery();
+    if (!is_system_proc(rmp)) {
+        do_lottery();
+    }
 
 	return OK;
 }
@@ -179,10 +181,12 @@ int do_stop_scheduling(message *m_ptr)
 	rmp->flags = 0; /*&= ~IN_USE;*/
 
     // Remove tickets from pool
-    total_tickets -= rmp->tickets;
+    if (!is_system_proc(rmp)) {
+        total_tickets -= rmp->tickets;
 
-    // Handle case where task finishes before quantum runs out
-    do_lottery();
+        // Handle case where task finishes before quantum runs out
+        do_lottery();
+    }
 
 	return OK;
 }
@@ -400,7 +404,7 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 void init_scheduling(void)
 {
-    srandom(time(NULL));
+    //srandom(time(NULL));
 	balance_timeout = BALANCE_TIMEOUT * sys_hz();
 	init_timer(&sched_timer);
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
