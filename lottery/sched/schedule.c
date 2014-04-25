@@ -7,9 +7,8 @@
  *   do_nice		  Request to change the nice level on a proc
  *   init_scheduling      Called from main.c to set up/prepare scheduling
  */
-#include <sys/types.h>
 #include <stdlib.h>
-#include <time.h>
+#include <minix/syslib.h>
 #include "sched.h"
 #include "schedproc.h"
 #include <assert.h>
@@ -38,6 +37,8 @@ static void balance_queues(struct timer *tp);
 
 #define schedule_process_local(p)	\
 	schedule_process(p, SCHEDULE_CHANGE_PRIO | SCHEDULE_CHANGE_QUANTUM)
+#define schedule_process_prio(p)	\
+	schedule_process(p, SCHEDULE_CHANGE_PRIO)
 #define schedule_process_migrate(p)	\
 	schedule_process(p, SCHEDULE_CHANGE_CPU)
 
@@ -88,6 +89,19 @@ static void pick_cpu(struct schedproc * proc)
 #endif
 }
 
+// Borrowed from http://stackoverflow.com/questions/2999075
+inline int fair_rand(int n)
+{
+    int divisor = RAND_MAX / (n + 1);
+    int rv;
+
+    do {
+        rv = random() / divisor;
+    } while (rv > n);
+
+    return rv;
+}
+
 /*===========================================================================*
  *				do_lottery				     *
  *===========================================================================*/
@@ -96,7 +110,7 @@ void do_lottery(void)
 	struct schedproc *rmp;
 	int proc_nr;
 
-    int winner = (int) random() % total_tickets;
+    int winner = fair_rand(total_tickets);
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (is_system_proc(rmp) || !(rmp->flags & IN_USE)) continue;
@@ -108,7 +122,7 @@ void do_lottery(void)
             rmp->priority = MAX_USER_Q; /* increase priority */
 
             int rv;
-            if ((rv = schedule_process_local(rmp)) != OK) {
+            if ((rv = schedule_process_prio(rmp)) != OK) {
                 printf("Lottery scheduling error: %d\n", rv);
             }
             break;
@@ -142,13 +156,21 @@ int do_noquantum(message *m_ptr)
             return rv;
         }
     } else {
+        // Refresh quantum
+        if ((rv = schedule_process_local(rmp)) != OK) {
+            return rv;
+        }
+
         // Decrease each process 
         // Overwriting rmp!!
         for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
             if (!is_system_proc(rmp) && rmp->flags & IN_USE
                     && rmp->priority < MIN_USER_Q) {
                 rmp->priority += 1; /* lower priority */
-                schedule_process_local(rmp);
+                if (rmp->priority < MIN_USER_Q) rmp->priority += 1;
+                if (rmp->priority < MIN_USER_Q) rmp->priority += 1;
+
+                schedule_process_prio(rmp);
             }
         }
 
@@ -267,7 +289,7 @@ int do_start_scheduling(message *m_ptr)
 			return rv;
 
         if (!is_system_proc(rmp)) {
-            rmp->max_priority = MAX_USER_Q;
+            rmp->max_priority = USER_Q;
             rmp->tickets      = DEFAULT_TICKETS;
         }
 
@@ -320,6 +342,20 @@ int do_start_scheduling(message *m_ptr)
 /*===========================================================================*
  *				do_nice					     *
  *===========================================================================*/
+int nice_to_priority(int nice, unsigned* new_q)
+{
+	if (nice < PRIO_MIN || nice > PRIO_MAX) return(EINVAL);
+
+	*new_q = MAX_USER_Q + (nice-PRIO_MIN) * (MIN_USER_Q-MAX_USER_Q+1) /
+	    (PRIO_MAX-PRIO_MIN+1);
+
+	/* Neither of these should ever happen. */
+	if ((signed) *new_q < MAX_USER_Q) *new_q = MAX_USER_Q;
+	if (*new_q > MIN_USER_Q) *new_q = MIN_USER_Q;
+
+	return (OK);
+}
+
 int do_nice(message *m_ptr)
 {
     struct schedproc *rmp;
@@ -339,11 +375,14 @@ int do_nice(message *m_ptr)
 
     rmp = &schedproc[proc_nr_n];
     new_q = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
-    if (new_q >= NR_SCHED_QUEUES) {
-        return EINVAL;
-    }
-
-    if (!is_system_proc(rmp)) {
+    if (is_system_proc(rmp)) {
+        int new_q_copy = (int) new_q;
+        if (nice_to_priority(new_q, new_q_copy) != OK) {
+            return EINVAL;
+        }
+        if (new_q >= NR_SCHED_QUEUES) {
+            return EINVAL;
+    } else {
         total_tickets += new_q - rmp->tickets;
         rmp->tickets   = new_q;
         return OK;
@@ -408,6 +447,10 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 void init_scheduling(void)
 {
+    u64_t tsc;
+    read_tsc_64(&tsc);
+    srandom(tsc);
+
 	balance_timeout = BALANCE_TIMEOUT * sys_hz();
 	init_timer(&sched_timer);
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
