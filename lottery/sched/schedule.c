@@ -143,7 +143,7 @@ int do_noquantum(message *m_ptr)
 
     // Decrease each process 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (rmp->priority < MIN_USER_Q) {
+        if (rmp->priority < MIN_USER_Q && !is_system_proc(rmp)) {
             rmp->priority += 1; /* lower priority */
             schedule_process_local(rmp);
         }
