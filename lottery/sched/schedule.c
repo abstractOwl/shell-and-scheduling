@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <minix/com.h>
 #include <machine/archtypes.h>
+#include <sys/resource.h>
 #include "kernel/proc.h" /* for queue constants */
 
 static timer_t sched_timer;
@@ -377,11 +378,12 @@ int do_nice(message *m_ptr)
     new_q = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
     if (is_system_proc(rmp)) {
         int new_q_copy = (int) new_q;
-        if (nice_to_priority(new_q, new_q_copy) != OK) {
+        if (nice_to_priority(new_q_copy, &new_q) != OK) {
             return EINVAL;
         }
         if (new_q >= NR_SCHED_QUEUES) {
             return EINVAL;
+        }
     } else {
         total_tickets += new_q - rmp->tickets;
         rmp->tickets   = new_q;
