@@ -7,6 +7,7 @@
  *   do_nice		  Request to change the nice level on a proc
  *   init_scheduling      Called from main.c to set up/prepare scheduling
  */
+#include <sys/types.h>
 #include <stdlib.h>
 #include <time.h>
 #include "sched.h"
@@ -104,9 +105,11 @@ void do_lottery(void)
 
         if (winner <= 0) {
             // Found winner
-            if (rmp->priority > MAX_USER_Q) {
-                rmp->priority = MAX_USER_Q; /* increase priority */
-                schedule_process_local(rmp);
+            rmp->priority = MAX_USER_Q; /* increase priority */
+
+            int rv;
+            if ((rv = schedule_process_local(rmp)) != OK) {
+                printf("Lottery scheduling error: %d\n", rv);
             }
             break;
         }
@@ -138,18 +141,17 @@ int do_noquantum(message *m_ptr)
         if ((rv = schedule_process_local(rmp)) != OK) {
             return rv;
         }
-    }
-
-    // Decrease each process 
-	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-        if (!is_system_proc(rmp) && rmp->flags & IN_USE
-                && rmp->priority < MIN_USER_Q) {
-            rmp->priority += 1; /* lower priority */
-            schedule_process_local(rmp);
+    } else {
+        // Decrease each process 
+        // Overwriting rmp!!
+        for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+            if (!is_system_proc(rmp) && rmp->flags & IN_USE
+                    && rmp->priority < MIN_USER_Q) {
+                rmp->priority += 1; /* lower priority */
+                schedule_process_local(rmp);
+            }
         }
-	}
 
-    if (!is_system_proc(rmp)) {
         do_lottery();
     }
 
@@ -213,12 +215,14 @@ int do_start_scheduling(message *m_ptr)
 		return rv;
 	}
 	rmp = &schedproc[proc_nr_n];
+    rmp->tickets = 0;
 
 	/* Populate process slot */
 	rmp->endpoint     = m_ptr->SCHEDULING_ENDPOINT;
 	rmp->parent       = m_ptr->SCHEDULING_PARENT;
 	rmp->max_priority = (unsigned) m_ptr->SCHEDULING_MAXPRIO;
-	if (rmp->max_priority >= NR_SCHED_QUEUES) {
+
+	if (is_system_proc(rmp) && rmp->max_priority >= NR_SCHED_QUEUES) {
 		return EINVAL;
 	}
 
@@ -252,7 +256,6 @@ int do_start_scheduling(message *m_ptr)
 		 * from the parent */
 		rmp->priority   = rmp->max_priority;
 		rmp->time_slice = (unsigned) m_ptr->SCHEDULING_QUANTUM;
-        rmp->tickets    = 0;
 		break;
 		
 	case SCHEDULING_INHERIT:
@@ -405,7 +408,6 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 void init_scheduling(void)
 {
-    //srandom(time(NULL));
 	balance_timeout = BALANCE_TIMEOUT * sys_hz();
 	init_timer(&sched_timer);
 	set_timer(&sched_timer, balance_timeout, balance_queues, 0);
