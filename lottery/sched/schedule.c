@@ -392,7 +392,6 @@ int do_nice(message *m_ptr)
         }
     } else {
         if (new_q < 1 || new_q > 100) {
-            printf("SCHED: Invalid ticket number: %d\n", new_q);
             return EINVAL;
         }
         total_tickets += new_q - rmp->tickets;
