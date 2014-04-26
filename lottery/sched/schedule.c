@@ -126,7 +126,7 @@ int do_lottery(void)
 
         if (winner <= 0) {
             // Found winner
-            rmp->priority = MAX_USER_Q; /* increase priority */
+            rmp->priority = rmp->max_priority; /* increase priority */
 
             int rv;
             if ((rv = schedule_process_prio(rmp)) != OK) {
