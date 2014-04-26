@@ -13,6 +13,7 @@
 #include "schedproc.h"
 #include <assert.h>
 #include <minix/com.h>
+#include <minix/endpoint.h>
 #include <machine/archtypes.h>
 #include <sys/resource.h>
 #include "kernel/proc.h" /* for queue constants */
@@ -106,7 +107,7 @@ inline int fair_rand(int n)
 /*===========================================================================*
  *				do_lottery				     *
  *===========================================================================*/
-void do_lottery(void)
+int do_lottery(void)
 {
 	struct schedproc *rmp;
 	int proc_nr;
@@ -115,6 +116,11 @@ void do_lottery(void)
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (is_system_proc(rmp) || !(rmp->flags & IN_USE)) continue;
+
+        if (rmp->tickets < 1 || rmp->tickets > 100) {
+            printf("LOTTO: Invalid ticket amount: %d\n", rmp->tickets);
+            return rmp->tickets;
+        }
 
         winner -= rmp->tickets;
 
@@ -129,6 +135,8 @@ void do_lottery(void)
             break;
         }
 	}
+
+    return OK;
 }
 
 /*===========================================================================*
