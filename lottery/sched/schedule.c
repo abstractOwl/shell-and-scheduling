@@ -246,7 +246,6 @@ int do_start_scheduling(message *m_ptr)
 		return rv;
 	}
 	rmp = &schedproc[proc_nr_n];
-    rmp->tickets = 0;
 
 	/* Populate process slot */
 	rmp->endpoint     = m_ptr->SCHEDULING_ENDPOINT;
@@ -265,7 +264,6 @@ int do_start_scheduling(message *m_ptr)
 		   process scheduled, and the parent of itself. */
 		rmp->priority   = USER_Q;
 		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
-        rmp->tickets    = DEFAULT_TICKETS;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -296,11 +294,6 @@ int do_start_scheduling(message *m_ptr)
 		if ((rv = sched_isokendpt(m_ptr->SCHEDULING_PARENT,
 				&parent_nr_n)) != OK)
 			return rv;
-
-        if (!is_system_proc(rmp)) {
-            rmp->max_priority = USER_Q;
-            rmp->tickets      = DEFAULT_TICKETS;
-        }
 
 		rmp->priority = schedproc[parent_nr_n].priority;
 		rmp->time_slice = schedproc[parent_nr_n].time_slice;
@@ -343,6 +336,12 @@ int do_start_scheduling(message *m_ptr)
 
 	m_ptr->SCHEDULING_SCHEDULER = SCHED_PROC_NR;
 
+    if (is_system_proc(rmp)) {
+        rmp->tickets = 0;
+    } else {
+        rmp->max_priority = USER_Q;
+        rmp->tickets      = DEFAULT_TICKETS;
+    }
     total_tickets += rmp->tickets;
 
 	return OK;
@@ -393,6 +392,10 @@ int do_nice(message *m_ptr)
             return EINVAL;
         }
     } else {
+        if (new_q < 1 || new_q > 100) {
+            printf("SCHED: Invalid ticket number: %d\n", new_q);
+            return EINVAL;
+        }
         total_tickets += new_q - rmp->tickets;
         rmp->tickets   = new_q;
         return OK;
