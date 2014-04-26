@@ -132,7 +132,8 @@ int do_lottery(void)
             if ((rv = schedule_process_prio(rmp)) != OK) {
                 printf("Lottery scheduling error: %d\n", rv);
             }
-            break;
+
+            return OK;
         }
 	}
 
@@ -166,21 +167,19 @@ int do_noquantum(message *m_ptr)
         }
     } else {
         // Refresh quantum
-        if ((rv = schedule_process_local(rmp)) != OK) {
+        if ((rv = schedule_process(rmp, SCHEDULE_CHANGE_QUANTUM)) != OK) {
             return rv;
         }
 
         // Decrease each process 
         // Overwriting rmp!!
         for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-            if (!is_system_proc(rmp) && rmp->flags & IN_USE
-                    && rmp->priority < MIN_USER_Q) {
-                rmp->priority += 1; /* lower priority */
-                if (rmp->priority < MIN_USER_Q) rmp->priority += 1;
-                if (rmp->priority < MIN_USER_Q) rmp->priority += 1;
+            if (is_system_proc(rmp) || !(rmp->flags & IN_USE)) continue;
 
-                schedule_process_prio(rmp);
-            }
+            // Lower priority
+            if (rmp->priority < MIN_USER_Q) rmp->priority++;
+            if (rmp->priority < MIN_USER_Q) rmp->priority++;
+            schedule_process_prio(rmp);
         }
 
         do_lottery();
