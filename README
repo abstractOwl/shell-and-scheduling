@@ -1,0 +1,10 @@
+CS170P1
+
+Group:
+  AbstractOwl
+  Jon Adler <jadler@umail>
+
+Files:
+  README  -- This file
+  shell.c -- SiSH shell
+  patch   -- MINIX lottery scheduling patch
